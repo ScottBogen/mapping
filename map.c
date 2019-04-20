@@ -26,10 +26,6 @@
 #include <string.h>
 #include <sys/time.h>
 
-// end results
-int matches = 0;
-int mismatches = 0;
-
 // direction used for traceback
 typedef enum Direction {
     up,
@@ -623,15 +619,14 @@ void align(char* read, int _j, char* S, int l) {
     printf("start = %d, end = %d\n", start, end);
 
     int G_len = end-start+1;
-    printf("Glen = %d\n", G_len);
     char* G = (char*) malloc(sizeof(char) * G_len);
-
+    
     int k = 0;
     for (i = start; i <= end && i < strlen(S)-1; i++) {
         G[k++] = S[i]; 
     }
     G[k] = '\0';
-
+    
     printf("align: G = %s\n", G);
     printf("align: read = %s\n", read);
 
@@ -756,39 +751,8 @@ void align(char* read, int _j, char* S, int l) {
                 max_cell = &table[i][j]; // make this the new max_cell
                 printf("max cell changed to table[%d][%d]\n", i, j);
             }
-
-            if (max_of_dirs == 0) {
-                table[i][j].dir = done;
-            }
-
-            else if (max_of_dirs == table[i][j].D) {
-                table[i][j].dir = up;
-                printf("set to up\n");
-            }
-            
-            else if (max_of_dirs == table[i][j].I) {
-                table[i][j].dir = left;
-                printf("set to left\n");
-            }
-
-            // none of these cases actually work
-            else if (max_of_dirs == table[i][j].S) {
-                table[i][j].dir = diagonal;
-            }  
-
-
         }
     }
-
-
-    // put cols in table 
-    // for (int i = 0; i <= n; i++) { 
-    //    table[i] = (cell*) malloc(sizeof(cell) * (m+1));            
-    // } 
-    
-
-    //printf("Matches: %d\nMismatches: %d\n", matches, mismatches);
-    //printf("Identities: %d/%d (%f%)\n", matches, max_length, (float) matches/max_length * 100.0);
 
     printf("Final table:\n      ");
     for (i = 0; i < strlen(G); i++) {
@@ -804,33 +768,6 @@ void align(char* read, int _j, char* S, int l) {
     }
     printf("\n");
 
-    printf("Direction table:\n      ");
-    for (i = 0; i < strlen(G); i++) {
-        printf(" %5c", G[i]);
-    }
-    printf("\n");
-
-    for (i = 0; i < m; i++) {
-        for (j = 0; j < n; j++) {
-            switch(table[i][j].dir) {
-                case up:
-                    printf("%6s", "U");
-                    break;
-                case left:
-                    printf("%6s", "L");
-                    break;
-                case diagonal:
-                    printf("%6s", "D");
-                    break;
-                case done:
-                    printf("%6s", "0");
-                    break;
-            }
-
-        }
-        printf("\n");
-    }
-    printf("\n");
 
     printf("Local optimal score: %d\n", findMax(max_cell->D, max_cell->I, max_cell->S));
     printf("Maximum cell position: Table[%d][%d]\n", max_cell->i, max_cell->j);
@@ -883,6 +820,10 @@ void align(char* read, int _j, char* S, int l) {
         d = diagonal;
     }
     
+    int matches = 0;
+    int mismatches = 0;
+    int gaps = 0;
+
     while (1) {
 
         /* 
@@ -916,6 +857,7 @@ void align(char* read, int _j, char* S, int l) {
         // D
         if (d == up) {
             retrace = &table[i-1][j];
+            gaps++;
 
             // S, D, I
             d = findMaxDirection(
@@ -929,7 +871,7 @@ void align(char* read, int _j, char* S, int l) {
         // I
         else if (d == left) {
             retrace = &table[i][j-1];
-
+            gaps++;
             // S, D, I
             d = findMaxDirection(
                                     retrace->S + h + g,
@@ -942,7 +884,13 @@ void align(char* read, int _j, char* S, int l) {
         // S
         else if (d == diagonal) {
             retrace = &table[i-1][j-1];
-            int sub = substitution(s1[i-2], s2[j-2]);
+            int sub = substitution(s1[i-1], s2[j-1]);
+            if (s1[i-1] == s2[j-1]) {
+                matches++;
+            }
+            else {
+                mismatches++;
+            }
 
             // S, D, I
             d = findMaxDirection(
@@ -953,6 +901,8 @@ void align(char* read, int _j, char* S, int l) {
             printf("Diagonal from [%d][%d]\n", i, j);
         }
     }
+
+    printf("Results:\n\tMatches: %d\n\tMismatches: %d\n\tGaps: %d\n", matches, mismatches, gaps);
 
     free(table);
     free(G);
