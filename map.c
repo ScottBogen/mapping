@@ -556,7 +556,7 @@ void mapReads(tree* t, char* S, int* A) {
     
     // for all of the reads
     for (int r_i = 0; r_i < 1; r_i++) {
-        char* read = "AN";
+        char* read = "BANNANA";
         printf("read = %s\n", read);
 
         int l = strlen(read);
@@ -574,7 +574,7 @@ void mapReads(tree* t, char* S, int* A) {
             printf("Calling alignment with position %d\n", A[i]-1);
             align(read, A[i]-1, S, l);
             // note to self: It's A[i]-1 because A[i] is the index
-            // of the 1-index S string. But it needs to be -1 so that
+            // of the 1-indexed S string. But it needs to be -1 so that
             // I can just pass S instead of doing more manipulation.
         }
 
@@ -584,7 +584,7 @@ void mapReads(tree* t, char* S, int* A) {
 
 void align(char* read, int _j, char* S, int l) {
 
-    printf("Align: j, l = %d, %d\n", _j, l);
+    printf("Align: j = %d, l = %d\n", _j, l);
 
     // S[start, end]
     int start = _j-l;    // (-1 for see below:)
@@ -613,6 +613,7 @@ void align(char* read, int _j, char* S, int l) {
     G[k] = '\0';
 
     printf("align: G = %s\n", G);
+    printf("align: read = %s\n", read);
 
     /* params setup:
         0: ma
@@ -665,22 +666,20 @@ void align(char* read, int _j, char* S, int l) {
     // @ cells (i, 0)
     for (i = 1; i < m; i++) {           // on each col of 0th row
         cell* temp = &table[i][0];
-        temp->S = temp->I = -100000;
-        temp->D = h + i * g;
+        temp->S = temp->I = temp->D = 0;
         temp->i = i;
         temp->j = 0;
-        temp->dir = up;
+        temp->dir = done;
     }
 
 
     // @ cells (0,j) 
     for (j = 1; j < n; j++) {           // on each row of 0th col
         cell* temp = &table[0][j];
-        temp->S = temp->D = -100000;
-        temp->I = h + j * g;
+        temp->S = temp->D = temp->I = 0;
         temp->i = 0;
         temp->j = j;
-        temp->dir = left;
+        temp->dir = done;
     }
 
     char* s1 = read;
@@ -710,7 +709,7 @@ void align(char* read, int _j, char* S, int l) {
                                         temp->S + h + g, 
                                         temp->I + h + g,
                                         0
-                                    );
+                                        );
 
             // set temp to above  
             temp = &table[i][j-1];
@@ -719,10 +718,17 @@ void align(char* read, int _j, char* S, int l) {
                                         temp->D + h + g, 
                                         temp->S + h + g,
                                         0 
-                                    );
+                                        );
 
             // here we use findMax to find the max between S, D, and I
             int max_of_dirs = findMax(table[i][j].S, table[i][j].D, table[i][j].I);
+            
+            if (i == 4 && j == 3) {
+                printf("MAX of dirs = %d\n", max_of_dirs);
+
+                printf(" S = %d \n I = %d \n D = %d \n", temp->S, temp->I, temp->D);
+            }
+            
             if (max_of_dirs < 0) {
                 max_of_dirs = 0;
                 curr->S = curr->I = curr->D = 0;
@@ -734,7 +740,12 @@ void align(char* read, int _j, char* S, int l) {
                 //printf("max cell changed to table[%d][%d]\n", i, j);
             }
 
-            if (max_of_dirs == table[i][j].S) {
+            if (max_of_dirs == 0) {
+                table[i][j].dir = done;
+            }
+
+            // none of these cases actually work
+            else if (max_of_dirs == table[i][j].S) {
                 table[i][j].dir = diagonal;
             }  
 
@@ -745,9 +756,6 @@ void align(char* read, int _j, char* S, int l) {
             else if (max_of_dirs == table[i][j].I) {
                 table[i][j].dir = left;
             }
-            else {
-                table[i][j].dir = done;
-            }
         }
     }
 
@@ -757,8 +765,6 @@ void align(char* read, int _j, char* S, int l) {
     //    table[i] = (cell*) malloc(sizeof(cell) * (m+1));            
     // } 
     
-    cell* temp = &max_cell;
-    printf("Local optimal score: %d\n", findMax(temp->D, temp->I, temp->S));
 
     //printf("Matches: %d\nMismatches: %d\n", matches, mismatches);
     //printf("Identities: %d/%d (%f%)\n", matches, max_length, (float) matches/max_length * 100.0);
@@ -775,6 +781,38 @@ void align(char* read, int _j, char* S, int l) {
         }
         printf("\n");
     }
+    printf("\n");
+
+    printf("Direction table:\n      ");
+    for (i = 0; i < strlen(G); i++) {
+        printf(" %5c", G[i]);
+    }
+    printf("\n");
+
+    for (i = 0; i < m; i++) {
+        for (j = 0; j < n; j++) {
+            switch(table[i][j].dir) {
+                case up:
+                    printf("%6s", "U");
+                    break;
+                case left:
+                    printf("%6s", "L");
+                    break;
+                case diagonal:
+                    printf("%6s", "D");
+                    break;
+                case done:
+                    printf("%6s", "0");
+                    break;
+            }
+
+        }
+        printf("\n");
+    }
+    printf("\n");
+
+    printf("Local optimal score: %d\n", findMax(max_cell->D, max_cell->I, max_cell->S));
+    printf("Maximum cell position: Table[%d][%d]\n", max_cell->i, max_cell->j);
     printf("\n");
 
     free(table);
