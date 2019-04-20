@@ -52,8 +52,8 @@ int num_nodes = 0;
 int max_depth = 0;
 int max_length = 0;
 
-int ma = 1;
-int mi = -2;
+int ma = 20;
+int mi = -20;
 
 int x = 0;
 int m = 100;
@@ -122,6 +122,23 @@ int findMax(int a, int b, int c) {
     if (b > max) { max = b; }
     if (c > max) { max = c; }
     return max;
+}
+
+direction findMaxDirection(int S, int D, int I) {
+    int max = S;
+    direction d = diagonal;
+    if (D > max) { 
+        max = D;
+        d = up; 
+    }
+    if (I > max) { 
+        max = I;
+        d = left; 
+    }
+    if (max <= 0) {
+        d = done;
+    }
+    return d;
 }
 
 // does ctrl+c, ctrl+v count as code reuse? 
@@ -555,8 +572,11 @@ void mapReads(tree* t, char* S, int* A) {
     int x = 25;
     
     // for all of the reads
+
+    // good non-diagonal case: read:MISIPI, genome:MISSISSIPPI
+
     for (int r_i = 0; r_i < 1; r_i++) {
-        char* read = "BANNANA";
+        char* read = "MISIPI";
         printf("read = %s\n", read);
 
         int l = strlen(read);
@@ -622,7 +642,7 @@ void align(char* read, int _j, char* S, int l) {
         3: g
     */ 
 
-    int h = -5;
+    int h = -1;
     int g = -1;
 
     /* 
@@ -700,7 +720,7 @@ void align(char* read, int _j, char* S, int l) {
 
             // set temp to T(i-1,j-1)
             temp = &table[i-1][j-1];
-            table[i][j].S = findMaxLocal(temp->S, temp->D, temp->I, 0) + substitution(s1[i-1], s2[j-1]);
+            table[i][j].S = findMax(temp->S, temp->D, temp->I) + substitution(s1[i-1], s2[j-1]);
 
             // calculate for D by viewing top cell at table[i-1, j]
             temp = &table[i-1][j];
@@ -721,13 +741,10 @@ void align(char* read, int _j, char* S, int l) {
                                         );
 
             // here we use findMax to find the max between S, D, and I
-            int max_of_dirs = findMax(table[i][j].S, table[i][j].D, table[i][j].I);
-            
-            if (i == 4 && j == 3) {
-                printf("MAX of dirs = %d\n", max_of_dirs);
-
-                printf(" S = %d \n I = %d \n D = %d \n", temp->S, temp->I, temp->D);
-            }
+            int max_of_dirs = findMax( table[i][j].S, 
+                                       table[i][j].D, 
+                                       table[i][j].I
+                                     );
             
             if (max_of_dirs < 0) {
                 max_of_dirs = 0;
@@ -737,11 +754,21 @@ void align(char* read, int _j, char* S, int l) {
             // if the max of this cell's (S or D or I) is greater than the max cell's 
             if (max_of_dirs > findMax(max_cell->D, max_cell->I, max_cell->S)) { 
                 max_cell = &table[i][j]; // make this the new max_cell
-                //printf("max cell changed to table[%d][%d]\n", i, j);
+                printf("max cell changed to table[%d][%d]\n", i, j);
             }
 
             if (max_of_dirs == 0) {
                 table[i][j].dir = done;
+            }
+
+            else if (max_of_dirs == table[i][j].D) {
+                table[i][j].dir = up;
+                printf("set to up\n");
+            }
+            
+            else if (max_of_dirs == table[i][j].I) {
+                table[i][j].dir = left;
+                printf("set to left\n");
             }
 
             // none of these cases actually work
@@ -749,13 +776,7 @@ void align(char* read, int _j, char* S, int l) {
                 table[i][j].dir = diagonal;
             }  
 
-            else if (max_of_dirs == table[i][j].D) {
-                table[i][j].dir = up;
-            }
-            
-            else if (max_of_dirs == table[i][j].I) {
-                table[i][j].dir = left;
-            }
+
         }
     }
 
@@ -814,6 +835,124 @@ void align(char* read, int _j, char* S, int l) {
     printf("Local optimal score: %d\n", findMax(max_cell->D, max_cell->I, max_cell->S));
     printf("Maximum cell position: Table[%d][%d]\n", max_cell->i, max_cell->j);
     printf("\n");
+
+
+    // let's try a traceback in a different way -- not using the direction matrix
+
+    // "d is saying look up, but not saying which of the 3 up values to use"
+    // "if it came from d i-1,j you just did g, otherwise you did + h + g"
+
+
+    /* 
+        Here's what I think so far:
+
+        Start at max_cell. Pick the max value between S, D, and I, then enter a loop:
+
+        If max was 0, just end the retrace.
+
+        If max was D:
+            Look at cell (i-1,j). 
+            For that cell, compute next max using D rules:
+                Max (D(i-1,j) + g, S(i-1,j) + h + g, I(i-1,j) + h + g)
+                Update curr_cell = (i-1,j) 
+                Set direction = whatever was max (S, I, or D)
+                Go onto next iteration 
+        If max was I:
+            Look at cell (i, j-1)
+            For that cell, compute next max using I rules:
+                Max (I(i, j-1) + g, S(i,j-1) + h + g, D(i,j-1) + h + g)
+                Update curr_cell = (i, j-1)
+                Set direction = whatever was max (S, I, or D)
+                Go onto next iteration
+
+        If max was S:
+            (same procedure as above)
+        
+    */
+
+    direction d;
+    cell* retrace = max_cell;
+    int val = findMax(max_cell->D, max_cell->I, max_cell->S);
+    if (val == max_cell->D) {
+        d = up;
+    }
+    else if (val == max_cell->I) {
+        d = left;
+    }
+    else if (val == max_cell->S) {
+        d = diagonal;
+    }
+    
+    while (1) {
+
+        /* 
+        If max was D:
+            Look at cell (i-1,j). 
+            For that cell, compute next max using D rules:
+                Max (D(i-1,j) + g, S(i-1,j) + h + g, I(i-1,j) + h + g)
+            Update curr_cell = (i-1,j) 
+            Set direction = whatever was max (S, I, or D)
+            Go onto next iteration 
+        If max was I:
+            Look at cell (i, j-1)
+            For that cell, compute next max using I rules:
+                Max (I(i, j-1) + g, S(i,j-1) + h + g, D(i,j-1) + h + g)
+            Update curr_cell = (i, j-1)
+            Set direction = whatever was max (S, I, or D)
+            Go onto next iteration
+
+        If max was S:
+            (same procedure as above)
+        */
+        
+        i = retrace->i;
+        j = retrace->j;
+        
+        if (d == done || i == 0 || j == 0) { 
+            printf("Done at [%d][%d]\n", i, j);
+            break; 
+        }
+
+        // D
+        if (d == up) {
+            retrace = &table[i-1][j];
+
+            // S, D, I
+            d = findMaxDirection(
+                                    retrace->S + h + g,
+                                    retrace->D + g,
+                                    retrace->I + h + g
+                                );
+            printf("Up from [%d][%d]\n", i, j);
+        }
+
+        // I
+        else if (d == left) {
+            retrace = &table[i][j-1];
+
+            // S, D, I
+            d = findMaxDirection(
+                                    retrace->S + h + g,
+                                    retrace->D + h + g,
+                                    retrace->I + g
+                                );
+            printf("Left from [%d][%d]\n", i, j);
+        }
+
+        // S
+        else if (d == diagonal) {
+            retrace = &table[i-1][j-1];
+            int sub = substitution(s1[i-2], s2[j-2]);
+
+            // S, D, I
+            d = findMaxDirection(
+                                    retrace->S + sub,
+                                    retrace->D + sub,
+                                    retrace->I + sub
+                                );
+            printf("Diagonal from [%d][%d]\n", i, j);
+        }
+    }
 
     free(table);
     free(G);
