@@ -44,7 +44,7 @@ typedef struct Cell {
 } cell;
 
 
-int x = 1;
+int x = 25;
 
 int num_nodes = 0;
 int max_depth = 0;
@@ -573,20 +573,18 @@ int best_optimal_score = 0;
 
 
 void mapReads(tree* t, char* S, int* A) {
-    
     FILE* fp;
     char* file_name = "Peach_simulated_reads.fasta";
   
     fp = fopen(file_name, "r");
-
     if (!fp) { printf("READS file %s not opened\n", file_name); exit(0); }
     printf("READS file %s opened\n", file_name);
 
     // open reads file
     
     // good non-diagonal case: read:MISIPI, genome:MISSISSIPPI
-    for (int r_i = 0; r_i < 1; r_i++) {
-        //char* read = readReadsFile(fp);
+    for (int r_i = 0; r_i < 100; r_i++) {
+        char* read = readReadsFile(fp);
 
         /* 
             Notes: mouse-test length is 47, start position is 1493
@@ -596,7 +594,7 @@ void mapReads(tree* t, char* S, int* A) {
         */
 
         // peach:
-        char* read = "CAACTAAAGCCATGAATGTCTAATGATACAAATAAGACAGTACCCGCAGTCTCAAATATTTAGCCTAAGTTGCATAACAAGTTGGCTTCCATAATGAGAGACT";
+        //char* read = "CAACTAAAGCCATGAATGTCTAATGATACAAATAAGACAGTACCCGCAGTCTCAAATATTTAGCCTAAGTTGCATAACAAGTTGGCTTCCATAATGAGAGACT";
 
         // tomato @ 48020:
         //char* read = "TTCTATATTATATATATCTCTCATTCTATATTTATTTCAAATTCTAATTGTTT";
@@ -604,8 +602,8 @@ void mapReads(tree* t, char* S, int* A) {
         // mouse @ 2660:
         //char* read = "AGATGGGGAGTGGTGGCACTCTGGTGAG";
         
-        
-        printf("read = %s\n", read);
+        printf("reads: read #%d\t\t", r_i+1);
+        //printf("read = %s\n", read);
         // 712655
 
         //int l = strlen(read);
@@ -618,26 +616,35 @@ void mapReads(tree* t, char* S, int* A) {
         start = L_i[0];
         end = L_i[1];
 
+        if (start <= 0 && end <= 0) {
+            printf("No deepest node found for read %d\n", r_i);
+            free(L_i);
+            continue;
+        }
         
-        printf("Started alignment:\n");
+        // printf("Started alignment:\n");
         for (int i = start; i <= end; i++) {
-            printf("Calling alignment with position %d\n", A[i]-1);
+            //printf("[Read %d] Calling alignment with position %d\n", r_i, A[i]-1);
             align(read, A[i]-1, S, l);
             // note to self: It's A[i]-1 because A[i] is the index
             // of the 1-indexed S string. But it needs to be -1 so that
             // I can just pass S instead of doing more manipulation.
         }
+        //printf("Best optimal score: %d\nBest alignment start: %d\n", best_optimal_score, best_align_start);
+        printf("Best start = %d\n", best_align_start);
+
+        best_optimal_score = 0;
+        best_align_start = 0;
         free(L_i);
     }
 
-    printf("\n\nBest optimal score: %d\nBest alignment start: %d\n", best_optimal_score, best_align_start);
     close(fp);
 }
 
 
 void align(char* read, int _j, char* S, int l) {
 
-    printf("Align: j = %d, l = %d\n", _j, l);
+    //printf("Align: j = %d, l = %d\n", _j, l);
 
     // S[start, end]
     int start = _j-l;    // (-1 for see below:)
@@ -661,9 +668,7 @@ void align(char* read, int _j, char* S, int l) {
         G[k++] = S[i]; 
     }
     G[k] = '\0';
-    
-    printf("align: G = %s\n", G);
-    printf("align: read = %s\n", read);
+
 
     /* params setup:
         0: ma
@@ -685,7 +690,7 @@ void align(char* read, int _j, char* S, int l) {
     int m = strlen(read) + 1;
     int n = strlen(G) + 1;
 
-    printf("m = %d,   n = %d\n", m, n);
+    //printf("m = %d,   n = %d\n", m, n);
 
  
     // init table    
@@ -696,16 +701,12 @@ void align(char* read, int _j, char* S, int l) {
         table[i] = (cell*) malloc(sizeof(cell) * (n));            
     }
 
-    printf("\n\n");
-
     /* 
         keeping i constant and j moving produces a row
         keeping i moving and j constant produces a col
 
         which means i corresponds to a row#, j corresponds to a col#
     */
-
-    printf("Initialization\n");
 
     // init
     cell* base = &table[0][0];
@@ -806,9 +807,9 @@ void align(char* read, int _j, char* S, int l) {
 
     int optimal_score = findMax(max_cell->D, max_cell->I, max_cell->S);
 
-    printf("Local optimal score: %d\n", findMax(max_cell->D, max_cell->I, max_cell->S));
-    printf("Maximum cell position: Table[%d][%d]\n", max_cell->i, max_cell->j);
-    printf("\n");
+    //printf("Local optimal score: %d\n", findMax(max_cell->D, max_cell->I, max_cell->S));
+    //printf("Maximum cell position: Table[%d][%d]\n", max_cell->i, max_cell->j);
+    //printf("\n");
 
 
     // let's try a traceback in a different way -- not using the direction matrix
@@ -939,7 +940,7 @@ void align(char* read, int _j, char* S, int l) {
         }
     }
 
-    printf("Results:\n\tMatches: %d\n\tMismatches: %d\n\tGaps: %d\n", matches, mismatches, gaps);
+    //printf("Results:\n\tMatches: %d\n\tMismatches: %d\n\tGaps: %d\n", matches, mismatches, gaps);
 
     if (optimal_score > best_optimal_score) { 
         best_optimal_score = optimal_score;
@@ -966,7 +967,7 @@ int* findLoc(node* root, char* S, char* read) {
         read_ptr = 0;
         node* temp = findLocSearch(root, read+i, S, read_ptr);
         if (temp != NULL && max_length >= x) {
-            printf("deepest node set at length=%d\n", max_length);
+            //printf("deepest node set at length=%d\n", max_length);
             deepest_node = temp;
         }
     }
@@ -976,11 +977,19 @@ int* findLoc(node* root, char* S, char* read) {
 
     int* ids = (int*) malloc(sizeof(int) * 2);
 
-    ids[0] = deepest_node->map_start;
-    ids[1] = deepest_node->map_end;
+    if (deepest_node == NULL) {
+        ids[0] = -1;
+        ids[1] = -1;
+    } 
+    else { 
+        ids[0] = deepest_node->map_start;
+        ids[1] = deepest_node->map_end;
 
-    printf("FindLoc: Deepest node: %d\n", deepest_node->id);
-    printf("IDs: start = %d, end = %d\n", ids[0], ids[1]);
+        //printf("FindLoc: Deepest node: %d\n", deepest_node->id);
+        //printf("IDs: start = %d, end = %d\n", ids[0], ids[1]);
+        //printf("DeepestNode string depth: %d\n\n", deepest_node->depth);
+    }
+
     
     max_length = 0;
 
@@ -1091,7 +1100,7 @@ int main(int argc, char** argv) {
     printf("-- -- -- -- --\n");
 
     printf("McCreight's Algorithm program finished.\n");
-    
+    printf("Options used:\n\tx=%d\n\t");
     free(t);
     return 0;
 }
