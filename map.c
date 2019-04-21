@@ -44,15 +44,14 @@ typedef struct Cell {
 } cell;
 
 
+int x = 1;
+
 int num_nodes = 0;
 int max_depth = 0;
 int max_length = 0;
 
-int ma = 20;
-int mi = -20;
-
-int x = 0;
-int m = 100;
+int ma = 1;
+int mi = -2;
 
 int next_index = 0;
 
@@ -479,7 +478,6 @@ char* readFile(char* file_name) {
     return S;
 }
 
-
 void readAlphabetFile(char* file){
     FILE* fp;
     char* line = NULL;
@@ -517,11 +515,6 @@ int* prepareST(tree* t, int n) {
     }
     
     DFS_PrepareST(t->root, A);
-
-    for (int i = 0; i < n; i++) {
-        printf("A[%d] = %d\n", i, A[i]);
-    }
-
     return A;
 }
 
@@ -553,29 +546,70 @@ void DFS_PrepareST(node* n, int A[]){
     }
 }
 
+char* readReadsFile(FILE* fp) {
+    char* line = NULL;
+    size_t len;
+
+    int i = 0;
+
+    // hard-code for now, change later
+    char* read = (char*) malloc(sizeof(char) * 110);
+
+    while (getline(&line, &len, fp) != -1) {
+        if (line[0] != '>') {
+            while (line[i] != '\0' && line[i] != '\n') {
+                read[i] = line[i];
+                i++;
+            }
+            return read;
+        }
+    }
+    free(read);
+    return NULL;
+}
+
+int best_align_start = 0;
+int best_optimal_score = 0;
+
+
 void mapReads(tree* t, char* S, int* A) {
-    // suppose at read 1 (r[1...]), we matched 20 characters
-    // on read 2 (r[2...]), we should at least match 19 characters
-
-    // for (i = 1 to l) {
-        //      start     node*
-        //findPath(r[i...], root)
-    //}
-
-    // for every starting positin of our read (r_ptr = 0 to L)
-    // find the longest path that matches against my input.
-    // store this as a legth parameter and save it as the max if it is the max
-    int x = 25;
     
-    // for all of the reads
+    FILE* fp;
+    char* file_name = "Peach_simulated_reads.fasta";
+  
+    fp = fopen(file_name, "r");
 
+    if (!fp) { printf("READS file %s not opened\n", file_name); exit(0); }
+    printf("READS file %s opened\n", file_name);
+
+    // open reads file
+    
     // good non-diagonal case: read:MISIPI, genome:MISSISSIPPI
-
     for (int r_i = 0; r_i < 1; r_i++) {
-        char* read = "MISIPI";
-        printf("read = %s\n", read);
+        //char* read = readReadsFile(fp);
 
-        int l = strlen(read);
+        /* 
+            Notes: mouse-test length is 47, start position is 1493
+            So the best alignment is j=1493, l=47
+
+            For human, it starts at 10850
+        */
+
+        // peach:
+        char* read = "CAACTAAAGCCATGAATGTCTAATGATACAAATAAGACAGTACCCGCAGTCTCAAATATTTAGCCTAAGTTGCATAACAAGTTGGCTTCCATAATGAGAGACT";
+
+        // tomato @ 48020:
+        //char* read = "TTCTATATTATATATATCTCTCATTCTATATTTATTTCAAATTCTAATTGTTT";
+
+        // mouse @ 2660:
+        //char* read = "AGATGGGGAGTGGTGGCACTCTGGTGAG";
+        
+        
+        printf("read = %s\n", read);
+        // 712655
+
+        //int l = strlen(read);
+        int l = 25;
         int* L_i = findLoc(t->root, S, read);
 
         // read has been made 
@@ -593,10 +627,13 @@ void mapReads(tree* t, char* S, int* A) {
             // of the 1-indexed S string. But it needs to be -1 so that
             // I can just pass S instead of doing more manipulation.
         }
-
         free(L_i);
     }
+
+    printf("\n\nBest optimal score: %d\nBest alignment start: %d\n", best_optimal_score, best_align_start);
+    close(fp);
 }
+
 
 void align(char* read, int _j, char* S, int l) {
 
@@ -615,8 +652,6 @@ void align(char* read, int _j, char* S, int l) {
     if (end > strlen(S)-1) { 
         end = strlen(S)-1;      // -1 for $ 
     } 
-    
-    printf("start = %d, end = %d\n", start, end);
 
     int G_len = end-start+1;
     char* G = (char*) malloc(sizeof(char) * G_len);
@@ -637,7 +672,7 @@ void align(char* read, int _j, char* S, int l) {
         3: g
     */ 
 
-    int h = -1;
+    int h = -5;
     int g = -1;
 
     /* 
@@ -749,11 +784,11 @@ void align(char* read, int _j, char* S, int l) {
             // if the max of this cell's (S or D or I) is greater than the max cell's 
             if (max_of_dirs > findMax(max_cell->D, max_cell->I, max_cell->S)) { 
                 max_cell = &table[i][j]; // make this the new max_cell
-                printf("max cell changed to table[%d][%d]\n", i, j);
+                //printf("max cell changed to table[%d][%d]\n", i, j);
             }
         }
     }
-
+    /* 
     printf("Final table:\n      ");
     for (i = 0; i < strlen(G); i++) {
         printf(" %5c", G[i]);
@@ -767,7 +802,9 @@ void align(char* read, int _j, char* S, int l) {
         printf("\n");
     }
     printf("\n");
+    */ 
 
+    int optimal_score = findMax(max_cell->D, max_cell->I, max_cell->S);
 
     printf("Local optimal score: %d\n", findMax(max_cell->D, max_cell->I, max_cell->S));
     printf("Maximum cell position: Table[%d][%d]\n", max_cell->i, max_cell->j);
@@ -850,7 +887,7 @@ void align(char* read, int _j, char* S, int l) {
         j = retrace->j;
         
         if (d == done || i == 0 || j == 0) { 
-            printf("Done at [%d][%d]\n", i, j);
+            //printf("Done at [%d][%d]\n", i, j);
             break; 
         }
 
@@ -865,7 +902,7 @@ void align(char* read, int _j, char* S, int l) {
                                     retrace->D + g,
                                     retrace->I + h + g
                                 );
-            printf("Up from [%d][%d]\n", i, j);
+            //printf("Up from [%d][%d]\n", i, j);
         }
 
         // I
@@ -878,7 +915,7 @@ void align(char* read, int _j, char* S, int l) {
                                     retrace->D + h + g,
                                     retrace->I + g
                                 );
-            printf("Left from [%d][%d]\n", i, j);
+            //printf("Left from [%d][%d]\n", i, j);
         }
 
         // S
@@ -898,11 +935,16 @@ void align(char* read, int _j, char* S, int l) {
                                     retrace->D + sub,
                                     retrace->I + sub
                                 );
-            printf("Diagonal from [%d][%d]\n", i, j);
+            //printf("Diagonal from [%d][%d]\n", i, j);
         }
     }
 
     printf("Results:\n\tMatches: %d\n\tMismatches: %d\n\tGaps: %d\n", matches, mismatches, gaps);
+
+    if (optimal_score > best_optimal_score) { 
+        best_optimal_score = optimal_score;
+        best_align_start = _j;
+    }
 
     free(table);
     free(G);
@@ -911,8 +953,8 @@ void align(char* read, int _j, char* S, int l) {
 // findloc returns all starting positions of the LCS in a read
 int* findLoc(node* root, char* S, char* read) {
     int read_ptr;       
-    int l = strlen(read);
-    int max_length_index = -1;
+    int l = 25;
+    //int l = strlen(read);
 
     // 0: abcde
     // 1:  bcde
@@ -923,7 +965,8 @@ int* findLoc(node* root, char* S, char* read) {
     for (int i = 0; i < l; i++) {
         read_ptr = 0;
         node* temp = findLocSearch(root, read+i, S, read_ptr);
-        if (temp != NULL) {
+        if (temp != NULL && max_length >= x) {
+            printf("deepest node set at length=%d\n", max_length);
             deepest_node = temp;
         }
     }
@@ -996,13 +1039,14 @@ node* findLocSearch(node* v, char* read, char* S, int read_ptr) {
 //  $ <test executable> <input file containing sequence s> <input alphabet file> 
 int main(int argc, char** argv) {
 
-    if (argc < 3) {
-        printf("Example functionality: ./a.out <s1.fasta> <alphabet.txt>\n");
+    if (argc < 4) {
+        printf("Example functionality: ./a.out <s1.fasta> <reads.fasta> <alphabet.txt>\n");
         exit(0);
     }
 
     char* sequence_file = argv[1];
-    char* alphabet_file = argv[2];
+    char* reads_file = argv[2];
+    char* alphabet_file = argv[3];
 
     char* S = readFile(sequence_file);
     readAlphabetFile(alphabet_file);
@@ -1029,7 +1073,6 @@ int main(int argc, char** argv) {
     for (int i = 0; i < n; i++) {
         // uncomment the two below lines to see if/when the program breaks   
         printf("--- ITERATION #%d, CHARACTER=%c ---\n", i, S[i]);
-        
         findPath(t, t->root, S, i);
     }
     
