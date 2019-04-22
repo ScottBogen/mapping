@@ -44,8 +44,8 @@ typedef struct Cell {
 } cell;
 
 
-int x = 25;
-
+int x = 10;
+int successful_reads = 0;
 int duplicate_optimals = 0;
 
 int num_nodes = 0;
@@ -630,8 +630,11 @@ void mapReads(tree* t, char* S, int* A) {
             // of the 1-indexed S string. But it needs to be -1 so that
             // I can just pass S instead of doing more manipulation.
         }
+
         //printf("Best optimal score: %d\nBest alignment start: %d\n", best_optimal_score, best_align_start);
         printf("[Read %d] Best start = %d\n", r_i+1, best_align_start);
+
+        successful_reads++;
 
         best_optimal_score = 0;
         best_align_start = 0;
@@ -955,6 +958,16 @@ void align(char* read, int _j, char* S, int l) {
         best_align_start = _j;
     }
 
+    int alignlen = matches + mismatches + gaps;
+
+    double percentIdentity = (double)matches / (double) alignlen;
+    double lengthCoverage = (double) alignlen / l;
+
+    if (percentIdentity >= .8 && lengthCoverage >= .8) {
+        printf("% identity = %.2f, length coverage = %.2f\n", percentIdentity, lengthCoverage);
+    }
+
+
     free(table);
     free(G);
 }
@@ -993,6 +1006,10 @@ int* findLoc(node* root, char* S, char* read) {
         ids[0] = deepest_node->map_start;
         ids[1] = deepest_node->map_end;
 
+        if (deepest_node->children == NULL ) {
+            printf("deepest start = %d, deepest end = %d\n", deepest_node->map_start, deepest_node->map_end);
+        }
+
         //printf("FindLoc: Deepest node: %d\n", deepest_node->id);
         //printf("IDs: start = %d, end = %d\n", ids[0], ids[1]);
         //printf("DeepestNode string depth: %d\t", deepest_node->depth);
@@ -1005,7 +1022,6 @@ int* findLoc(node* root, char* S, char* read) {
 
 // recursive read-only findpath used for finding the longest read_ptr of a read compared to the genome. 
 node* findLocSearch(node* v, char* read, char* S, int read_ptr) {
-
     // case A: broke at edge
     if (read_ptr < strlen(read)) {
         for (int i = 0; i < alphabet_length; i++) {     // for each child 
@@ -1013,7 +1029,6 @@ node* findLocSearch(node* v, char* read, char* S, int read_ptr) {
                 node* child = v->children[i];
                 if (S[child->start_index] == read[read_ptr]) {           // if the first index of the label matches with s[offset]
                     int length = child->end_index - child->start_index + 1;     // get length of the label 
-                    
                     
                     if (strncmp(S+child->start_index, read+read_ptr, length) == 0) {        // if they are one in the same, we will have to jump to it 
                         node* temp = findLocSearch(child, read, S, read_ptr+length);     // read_ptr + length of label probably 
@@ -1032,28 +1047,20 @@ node* findLocSearch(node* v, char* read, char* S, int read_ptr) {
                             j++;
                         }
 
-
-
-
+                        if (read_ptr > max_length) {
+                            max_length = read_ptr;
+                            return child;
+                        }
+                        else {
+                            return NULL;
+                        }
                     }
                     break;
                 } 
             }
         }
     }
-    
-    // if we've fallen through, we've either failed the child test or we've returned from our recursive window. so return;
-    
-    // case A: breaks along path: return the last visited node (this one, since we didn't move on)
-    // case B: breaks at node: return this one (since we can't take child paths)
-
-    if (read_ptr > max_length) {
-        max_length = read_ptr;
-        return v;
-    }
-    else {
-        return NULL;
-    }
+    return NULL;
 }
 
 //  $ <test executable> <input file containing sequence s> <input alphabet file> 
@@ -1108,21 +1115,13 @@ int main(int argc, char** argv) {
 
     //searchTree(t->root, S);
 
-    node* temp = t->root;
-    for (int i = 0; i < 20; i++) {
-        printf("[%d] depth is %d, start is %d, end is %d\n", i, temp->depth, temp->start_index, temp->end_index);
-        if (temp->children != NULL) {
-            temp = temp->children[1];
-        }
-        else { break; }
-    }
-
     printf("--mapreads:--\n");
     mapReads(t, S, A);
     printf("-- -- -- -- --\n");
 
     printf("McCreight's Algorithm program finished.\n");
     printf("Options used:\n\tx=%d\n\tduplicate optimals=%d\n", x, duplicate_optimals);
+    printf("successful reads = %d\n", successful_reads);
     free(t);
     return 0;
 }
