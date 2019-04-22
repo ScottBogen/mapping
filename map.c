@@ -46,6 +46,8 @@ typedef struct Cell {
 
 int x = 25;
 
+int duplicate_optimals = 0;
+
 int num_nodes = 0;
 int max_depth = 0;
 int max_length = 0;
@@ -296,10 +298,7 @@ void enumerate(node* n, char* S) {
             }
         }
     }
-
-
 }
-
 
 // to maintain lexicographical structure
 void sortChildren(node* n, char* S) {
@@ -350,7 +349,6 @@ node* findPath(tree* t, node* v, char* S, int offset) {
                         while (S[j++] == S[k++]) {
                             matches++;      // count # matches on the current label
                         }
-
 
                         /*              
                                         What we're doing:
@@ -583,8 +581,10 @@ void mapReads(tree* t, char* S, int* A) {
     // open reads file
     
     // good non-diagonal case: read:MISIPI, genome:MISSISSIPPI
-    for (int r_i = 0; r_i < 100; r_i++) {
+    for (int r_i = 0; ; r_i++) {
         char* read = readReadsFile(fp);
+
+        if (read == NULL) { break; }
 
         /* 
             Notes: mouse-test length is 47, start position is 1493
@@ -602,7 +602,7 @@ void mapReads(tree* t, char* S, int* A) {
         // mouse @ 2660:
         //char* read = "AGATGGGGAGTGGTGGCACTCTGGTGAG";
         
-        printf("reads: read #%d\t\t", r_i+1);
+        //printf("reads: read #%d\t\t", r_i+1);
         //printf("read = %s\n", read);
         // 712655
 
@@ -617,7 +617,7 @@ void mapReads(tree* t, char* S, int* A) {
         end = L_i[1];
 
         if (start <= 0 && end <= 0) {
-            printf("No deepest node found for read %d\n", r_i);
+            //printf("No deepest node found for read %d\n", r_i);
             free(L_i);
             continue;
         }
@@ -631,11 +631,12 @@ void mapReads(tree* t, char* S, int* A) {
             // I can just pass S instead of doing more manipulation.
         }
         //printf("Best optimal score: %d\nBest alignment start: %d\n", best_optimal_score, best_align_start);
-        printf("Best start = %d\n", best_align_start);
+        printf("[Read %d] Best start = %d\n", r_i+1, best_align_start);
 
         best_optimal_score = 0;
         best_align_start = 0;
         free(L_i);
+        free(read);
     }
 
     close(fp);
@@ -942,7 +943,14 @@ void align(char* read, int _j, char* S, int l) {
 
     //printf("Results:\n\tMatches: %d\n\tMismatches: %d\n\tGaps: %d\n", matches, mismatches, gaps);
 
-    if (optimal_score > best_optimal_score) { 
+    if (optimal_score == best_optimal_score) {
+        //printf("duplicate @ %d & %d\t", best_align_start, _j);
+        best_optimal_score = optimal_score;
+        best_align_start = _j;
+        duplicate_optimals++;
+    }
+
+    else if (optimal_score >= best_optimal_score) { 
         best_optimal_score = optimal_score;
         best_align_start = _j;
     }
@@ -951,7 +959,7 @@ void align(char* read, int _j, char* S, int l) {
     free(G);
 }
 
-// findloc returns all starting positions of the LCS in a read
+// findloc returns the start and end node id's for the deepest available node in a subtree, if such a node exists 
 int* findLoc(node* root, char* S, char* read) {
     int read_ptr;       
     int l = 25;
@@ -966,7 +974,7 @@ int* findLoc(node* root, char* S, char* read) {
     for (int i = 0; i < l; i++) {
         read_ptr = 0;
         node* temp = findLocSearch(root, read+i, S, read_ptr);
-        if (temp != NULL && max_length >= x) {
+        if (temp != NULL && max_length >= x) { // edited: used to have && max_length >= x
             //printf("deepest node set at length=%d\n", max_length);
             deepest_node = temp;
         }
@@ -987,10 +995,9 @@ int* findLoc(node* root, char* S, char* read) {
 
         //printf("FindLoc: Deepest node: %d\n", deepest_node->id);
         //printf("IDs: start = %d, end = %d\n", ids[0], ids[1]);
-        //printf("DeepestNode string depth: %d\n\n", deepest_node->depth);
+        //printf("DeepestNode string depth: %d\t", deepest_node->depth);
     }
 
-    
     max_length = 0;
 
     return ids;
@@ -1006,6 +1013,8 @@ node* findLocSearch(node* v, char* read, char* S, int read_ptr) {
                 node* child = v->children[i];
                 if (S[child->start_index] == read[read_ptr]) {           // if the first index of the label matches with s[offset]
                     int length = child->end_index - child->start_index + 1;     // get length of the label 
+                    
+                    
                     if (strncmp(S+child->start_index, read+read_ptr, length) == 0) {        // if they are one in the same, we will have to jump to it 
                         node* temp = findLocSearch(child, read, S, read_ptr+length);     // read_ptr + length of label probably 
                         return temp;
@@ -1023,7 +1032,9 @@ node* findLocSearch(node* v, char* read, char* S, int read_ptr) {
                             j++;
                         }
 
-                        // allow to fall through to bottom
+
+
+
                     }
                     break;
                 } 
@@ -1081,7 +1092,9 @@ int main(int argc, char** argv) {
     // loop to insert new nodes into tree
     for (int i = 0; i < n; i++) {
         // uncomment the two below lines to see if/when the program breaks   
-        printf("--- ITERATION #%d, CHARACTER=%c ---\n", i, S[i]);
+        if (i % 20000 == 0) {
+            printf("--- ITERATION #%d, CHARACTER=%c ---\n", i, S[i]);
+        }
         findPath(t, t->root, S, i);
     }
     
@@ -1095,12 +1108,21 @@ int main(int argc, char** argv) {
 
     //searchTree(t->root, S);
 
+    node* temp = t->root;
+    for (int i = 0; i < 20; i++) {
+        printf("[%d] depth is %d, start is %d, end is %d\n", i, temp->depth, temp->start_index, temp->end_index);
+        if (temp->children != NULL) {
+            temp = temp->children[1];
+        }
+        else { break; }
+    }
+
     printf("--mapreads:--\n");
     mapReads(t, S, A);
     printf("-- -- -- -- --\n");
 
     printf("McCreight's Algorithm program finished.\n");
-    printf("Options used:\n\tx=%d\n\t");
+    printf("Options used:\n\tx=%d\n\tduplicate optimals=%d\n", x, duplicate_optimals);
     free(t);
     return 0;
 }
