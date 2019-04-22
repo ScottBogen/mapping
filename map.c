@@ -44,9 +44,14 @@ typedef struct Cell {
 } cell;
 
 
-int x = 10;
+int x = 25;
 int successful_reads = 0;
 int duplicate_optimals = 0;
+
+int aboveXandY = 0;
+
+double percentIdentity;
+double lengthCoverage;
 
 int num_nodes = 0;
 int max_depth = 0;
@@ -632,7 +637,14 @@ void mapReads(tree* t, char* S, int* A) {
         }
 
         //printf("Best optimal score: %d\nBest alignment start: %d\n", best_optimal_score, best_align_start);
-        printf("[Read %d] Best start = %d\n", r_i+1, best_align_start);
+        //printf("[Read %d] Best start = %d\n", r_i+1, best_align_start);
+
+
+        if (percentIdentity >= .9 && lengthCoverage >= .8) {
+            aboveXandY++;
+            printf("[Read %d] Best start = %d\n", r_i+1, best_align_start);
+        }
+
 
         successful_reads++;
 
@@ -960,13 +972,12 @@ void align(char* read, int _j, char* S, int l) {
 
     int alignlen = matches + mismatches + gaps;
 
-    double percentIdentity = (double)matches / (double) alignlen;
-    double lengthCoverage = (double) alignlen / l;
+    percentIdentity = (double)matches / (double) alignlen;
+    lengthCoverage = (double) alignlen / l;
 
-    if (percentIdentity >= .8 && lengthCoverage >= .8) {
-        printf("% identity = %.2f, length coverage = %.2f\n", percentIdentity, lengthCoverage);
+    for (i = 0; i < m; i++) { 
+        free(table[i]);          
     }
-
 
     free(table);
     free(G);
@@ -1001,22 +1012,13 @@ int* findLoc(node* root, char* S, char* read) {
     if (deepest_node == NULL) {
         ids[0] = -1;
         ids[1] = -1;
-    } 
+    }
     else { 
         ids[0] = deepest_node->map_start;
         ids[1] = deepest_node->map_end;
-
-        if (deepest_node->children == NULL ) {
-            printf("deepest start = %d, deepest end = %d\n", deepest_node->map_start, deepest_node->map_end);
-        }
-
-        //printf("FindLoc: Deepest node: %d\n", deepest_node->id);
-        //printf("IDs: start = %d, end = %d\n", ids[0], ids[1]);
-        //printf("DeepestNode string depth: %d\t", deepest_node->depth);
     }
 
     max_length = 0;
-
     return ids;
 }
 
@@ -1122,6 +1124,7 @@ int main(int argc, char** argv) {
     printf("McCreight's Algorithm program finished.\n");
     printf("Options used:\n\tx=%d\n\tduplicate optimals=%d\n", x, duplicate_optimals);
     printf("successful reads = %d\n", successful_reads);
+    printf("above x and y = %d\n", aboveXandY);
     free(t);
     return 0;
 }
