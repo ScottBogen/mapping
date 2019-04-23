@@ -47,7 +47,7 @@ typedef struct Cell {
 int x = 25;
 int successful_reads = 0;
 int duplicate_optimals = 0;
-
+int duplicate_max_cells = 0;
 int aboveXandY = 0;
 
 double percentIdentity;
@@ -61,6 +61,9 @@ int ma = 1;
 int mi = -2;
 
 int next_index = 0;
+
+int last_max = 0;
+
 
 int lower_id = 1;   // stores ID of leaves (1 to strlen(S))
 int upper_id;       // stores ID of internal nodes
@@ -108,6 +111,7 @@ node* nodeHops(node* n, char* S, char* beta, int offset);
 node* nodeHops2(node* n, char* S, char* beta, int offset);
 node* findLocSearch(node* v, char* read, char* S, int read_ptr);
 int* findLoc(node* root, char* S, char* read);
+
 
 int substitution(char a, char b) {
     if (a == b) {
@@ -591,26 +595,6 @@ void mapReads(tree* t, char* S, int* A) {
 
         if (read == NULL) { break; }
 
-        /* 
-            Notes: mouse-test length is 47, start position is 1493
-            So the best alignment is j=1493, l=47
-
-            For human, it starts at 10850
-        */
-
-        // peach:
-        //char* read = "CAACTAAAGCCATGAATGTCTAATGATACAAATAAGACAGTACCCGCAGTCTCAAATATTTAGCCTAAGTTGCATAACAAGTTGGCTTCCATAATGAGAGACT";
-
-        // tomato @ 48020:
-        //char* read = "TTCTATATTATATATATCTCTCATTCTATATTTATTTCAAATTCTAATTGTTT";
-
-        // mouse @ 2660:
-        //char* read = "AGATGGGGAGTGGTGGCACTCTGGTGAG";
-        
-        //printf("reads: read #%d\t\t", r_i+1);
-        //printf("read = %s\n", read);
-        // 712655
-
         //int l = strlen(read);
         int l = 25;
         int* L_i = findLoc(t->root, S, read);
@@ -634,6 +618,7 @@ void mapReads(tree* t, char* S, int* A) {
             // note to self: It's A[i]-1 because A[i] is the index
             // of the 1-indexed S string. But it needs to be -1 so that
             // I can just pass S instead of doing more manipulation.
+            
         }
 
         //printf("Best optimal score: %d\nBest alignment start: %d\n", best_optimal_score, best_align_start);
@@ -641,15 +626,33 @@ void mapReads(tree* t, char* S, int* A) {
 
 
         if (percentIdentity >= .9 && lengthCoverage >= .8) {
+
+            char* a = "";
+            char* b = "";
+
+            if (duplicate_max_cells > 0) { 
+                a = "{a}";
+            }
+
+            if (duplicate_optimals > 0) {
+                b = "{b}";
+            }
+
             aboveXandY++;
-            printf("[Read %d] Best start = %d\n", r_i+1, best_align_start);
+            printf("[Read %d] Best start = %d, best end = %d\t", r_i+1, best_align_start, best_align_start + (2*l));
+            printf("%s\t%s\n", a, b);
+        }
+        else {
+            printf("[Read %d] No hit found\n");
         }
 
-
         successful_reads++;
-
+        
         best_optimal_score = 0;
         best_align_start = 0;
+        duplicate_optimals = 0;
+        duplicate_max_cells = 0;
+
         free(L_i);
         free(read);
     }
@@ -753,6 +756,7 @@ void align(char* read, int _j, char* S, int l) {
     char* s2 = G;   
 
     cell* max_cell = base;
+    int current_max = 0;
 
     // forward computation of smith-waterman
     for (i = 1; i < m; i++) { 
@@ -767,99 +771,54 @@ void align(char* read, int _j, char* S, int l) {
 
             // set temp to T(i-1,j-1)
             temp = &table[i-1][j-1];
-            table[i][j].S = findMax(temp->S, temp->D, temp->I) + substitution(s1[i-1], s2[j-1]);
+            curr->S = findMax(temp->S, temp->D, temp->I) + substitution(s1[i-1], s2[j-1]);
+            // S can't be negative on the table, so disallow it
+            if (curr->S < 0) {
+                curr->S = 0;
+            }
 
             // calculate for D by viewing top cell at table[i-1, j]
             temp = &table[i-1][j];
-            table[i][j].D = findMaxLocal(
+            curr->D = findMaxLocal  (
                                         temp->D + g, 
                                         temp->S + h + g, 
                                         temp->I + h + g,
                                         0
-                                        );
+                                    );
 
-            // set temp to above  
+            // set temp to I by viewing left cell at table[i, j-1]  
             temp = &table[i][j-1];
-            table[i][j].I = findMaxLocal(   
-                                        temp->I + g,        
-                                        temp->D + h + g, 
-                                        temp->S + h + g,
-                                        0 
-                                        );
+            curr->I = findMaxLocal(   
+                                    temp->I + g,        
+                                    temp->D + h + g, 
+                                    temp->S + h + g,
+                                    0 
+                                  );
 
             // here we use findMax to find the max between S, D, and I
-            int max_of_dirs = findMax( table[i][j].S, 
-                                       table[i][j].D, 
-                                       table[i][j].I
-                                     );
-            
-            if (max_of_dirs < 0) {
-                max_of_dirs = 0;
-                curr->S = curr->I = curr->D = 0;
-            }
+            int max_of_dirs = findMax(curr->S, curr->D, curr->I);
 
             // if the max of this cell's (S or D or I) is greater than the max cell's 
-            if (max_of_dirs > findMax(max_cell->D, max_cell->I, max_cell->S)) { 
-                max_cell = &table[i][j]; // make this the new max_cell
-                //printf("max cell changed to table[%d][%d]\n", i, j);
+            if (max_of_dirs >= findMax(max_cell->D, max_cell->I, max_cell->S)) { 
+                last_max = current_max;
+                current_max = max_of_dirs;
+                max_cell = curr; 
+            }
+
+            else if (max_of_dirs > findMax(max_cell->D, max_cell->I, max_cell->S)) {
+                last_max = 0;
+                current_max = max_of_dirs;
+                max_cell = curr; // make this the new max_cell
+
             }
         }
     }
-    /* 
-    printf("Final table:\n      ");
-    for (i = 0; i < strlen(G); i++) {
-        printf(" %5c", G[i]);
-    }
-    printf("\n");
-
-    for (i = 0; i < m; i++) {
-        for (j = 0; j < n; j++) {
-            printf(" %5d", findMax(table[i][j].D, table[i][j].I, table[i][j].S));
-        }
-        printf("\n");
-    }
-    printf("\n");
-    */ 
 
     int optimal_score = findMax(max_cell->D, max_cell->I, max_cell->S);
 
-    //printf("Local optimal score: %d\n", findMax(max_cell->D, max_cell->I, max_cell->S));
-    //printf("Maximum cell position: Table[%d][%d]\n", max_cell->i, max_cell->j);
-    //printf("\n");
-
-
-    // let's try a traceback in a different way -- not using the direction matrix
-
-    // "d is saying look up, but not saying which of the 3 up values to use"
-    // "if it came from d i-1,j you just did g, otherwise you did + h + g"
-
-
-    /* 
-        Here's what I think so far:
-
-        Start at max_cell. Pick the max value between S, D, and I, then enter a loop:
-
-        If max was 0, just end the retrace.
-
-        If max was D:
-            Look at cell (i-1,j). 
-            For that cell, compute next max using D rules:
-                Max (D(i-1,j) + g, S(i-1,j) + h + g, I(i-1,j) + h + g)
-                Update curr_cell = (i-1,j) 
-                Set direction = whatever was max (S, I, or D)
-                Go onto next iteration 
-        If max was I:
-            Look at cell (i, j-1)
-            For that cell, compute next max using I rules:
-                Max (I(i, j-1) + g, S(i,j-1) + h + g, D(i,j-1) + h + g)
-                Update curr_cell = (i, j-1)
-                Set direction = whatever was max (S, I, or D)
-                Go onto next iteration
-
-        If max was S:
-            (same procedure as above)
-        
-    */
+    if (last_max == optimal_score) {
+        duplicate_max_cells++;
+    }
 
     direction d;
     cell* retrace = max_cell;
@@ -959,7 +918,6 @@ void align(char* read, int _j, char* S, int l) {
     //printf("Results:\n\tMatches: %d\n\tMismatches: %d\n\tGaps: %d\n", matches, mismatches, gaps);
 
     if (optimal_score == best_optimal_score) {
-        //printf("duplicate @ %d & %d\t", best_align_start, _j);
         best_optimal_score = optimal_score;
         best_align_start = _j;
         duplicate_optimals++;
@@ -973,6 +931,8 @@ void align(char* read, int _j, char* S, int l) {
     int alignlen = matches + mismatches + gaps;
 
     percentIdentity = (double)matches / (double) alignlen;
+
+
     lengthCoverage = (double) alignlen / l;
 
     for (i = 0; i < m; i++) { 
@@ -1122,7 +1082,7 @@ int main(int argc, char** argv) {
     printf("-- -- -- -- --\n");
 
     printf("McCreight's Algorithm program finished.\n");
-    printf("Options used:\n\tx=%d\n\tduplicate optimals=%d\n", x, duplicate_optimals);
+    printf("Options used:\n\tx=%d\n\tl=%d\n", x, 25);
     printf("successful reads = %d\n", successful_reads);
     printf("above x and y = %d\n", aboveXandY);
     free(t);
