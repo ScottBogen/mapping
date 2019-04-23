@@ -1,23 +1,13 @@
 /* 
 
-    Layout:
+    What needs to be done:
+        Finalize format: (j0, j1) or no read found 
+        Write to a file 
+        Record times
+        Read from parameter file
+        Put things into separate files -- ex: .h, multiple .c files
 
-    tree: 
-        - root
-        - diplay(node* u): display u's children from left to right
-        - constructor: sets root node
-        - enumerate(node* u): display u's children in DFS traversal (l to r after visiting parent)
-        - BWT(char* s): enumerate leaf node's id's from left to right (lexicographically smallest to largest)
-            - BWT index is an array B of size n, given by B[i] = s[leaf(i)-1],
-              where leaf(i) is the suffix id of the ith leaf in the lexicographical order
-
-    node: 
-        - int id 
-        - int depth             parent->depth + edge label length 
-        - node** children
-        - node* parent 
-        - node* SL
-        - char* label;
+        Clean up functions <-- current
 
 */
 
@@ -43,25 +33,31 @@ typedef struct Cell {
     direction dir;      // traceback direction 
 } cell;
 
+char* reads_file_name = "Peach_simulated_reads.fasta";      // TODO: make this a param
 
-int x = 25;
-int successful_reads = 0;
-int duplicate_optimals = 0;
-int duplicate_max_cells = 0;
-int aboveXandY = 0;
-
-double percentIdentity;
-double lengthCoverage;
-
-int num_nodes = 0;
-int max_depth = 0;
-int max_length = 0;
 
 int ma = 1;
 int mi = -2;
+int h = -5;
+int g = -1;
+
+int x = 4;
+
+int duplicate_optimals = 0;
+int duplicate_max_cells = 0;
+
+
+int best_align_start = 0;
+int best_optimal_score = 0;
+
+
+double percent_identity;
+double length_coverage;
+
+int max_length = 0;
+
 
 int next_index = 0;
-
 int last_max = 0;
 
 
@@ -69,7 +65,6 @@ int lower_id = 1;   // stores ID of leaves (1 to strlen(S))
 int upper_id;       // stores ID of internal nodes
 
 int alphabet_length;
-int line_iterator = 1;  // used to ensure 10 li
 
 typedef struct Node {
     int id;
@@ -96,21 +91,16 @@ typedef struct Tree {
 } tree;
 
 
+
+/* Move to .h files and add all the new functions as well */
 tree* init();    // create tree
 node* createNode();
-
 void insert(tree* t, char* S, int i);       // insert new node into tree from string S at offset i
                                             // ex: t, "banana$", "3" = insert("nana$")
-void display(node* u);
-void enumerate(node* n, char* S);
-void BWT(tree* t);
 void sortChildren(node* n, char* S);
 node* findPath(tree* t, node* v, char* S, int offset);
-void printNodeInfo(node* temp, char* S);
-node* nodeHops(node* n, char* S, char* beta, int offset); 
-node* nodeHops2(node* n, char* S, char* beta, int offset);
 node* findLocSearch(node* v, char* read, char* S, int read_ptr);
-int* findLoc(node* root, char* S, char* read);
+int* findLoc(node* root, char* S, char* read, int l);
 
 
 int substitution(char a, char b) {
@@ -147,8 +137,7 @@ direction findMaxDirection(int S, int D, int I) {
     return d;
 }
 
-// does ctrl+c, ctrl+v count as code reuse? 
-int findMaxLocal(int a, int b, int c, int d) {
+int findMaxOfFour(int a, int b, int c, int d) {
     int max = a;
     if (b > max) { max = b; }
     if (c > max) { max = c; }
@@ -188,125 +177,13 @@ node* createNode() {
     n->end_index = -1;
     n->parent = NULL;
     n->SL = NULL;
-    num_nodes++;
     return n;
-}
-
-// test node info (for me)
-void printNodeInfo(node* temp, char* S) {
-    printf("Node Info:\n");
-    printf("\tid:\t\t%d\n", temp->id);
-    //printf("\tparent id:\t%d\n", temp->parent->id);
-
-    printf("\tparent id\t");
-    if (temp->parent) { printf("%d\n", temp->parent->id); } else { printf("no parent\n"); }
-
-    printf("\tchildren?\t");
-    if (temp->children) { printf("yes\n"); } else { printf("no\n"); }
-
-    printf("\tstart index:\t%d\n", temp->start_index);
-    printf("\tend index:\t%d\n", temp->end_index);
-    printf("\tdepth:\t\t%d\n", temp->depth);
-
-    char output[64];
-
-    for (int i = 0; i < 64; i++) { output[i] = 0; }
-
-    strncpy(output, S+temp->start_index, (temp->end_index - temp->start_index + 1));
-
-    printf("\tlabel:\t\t%s\n", output);
-    printf("\tSL?\t\t");
-    if (temp->SL) { printf("%d\n", temp->SL->id); } else {printf("no SL\n");} 
-    printf("\n");
-}
-
-// test function (for me) to print children of node n
-void searchTree(node* n, char* S) {
-    
-    //printf("in node id:%d\n", n->id);
-
-    // search children, l thru r
-    for (int i = 0; i < alphabet_length; i++) {
-        if (n->children != NULL) {
-            if (n->children[i] != NULL) {
-                searchTree(n->children[i], S);
-            }
-        }
-    }
-
-    printNodeInfo(n,S);
 }
 
 void writeToFile(node* n, char* S) {
     FILE* fp;
     fp = fopen("output.txt", "w");
-    searchTreeBST(n, S, fp);
     fclose(fp);
-}
-
-void searchTreeBST(node* n, char* S, FILE* fp) {
-    
-    //printf("in node id:%d\n", n->id);
-
-    // search children, l thru r
-    if (n->children != NULL) {
-        for (int i = 0; i < alphabet_length; i++) {
-            if (n->children[i] != NULL) {
-                searchTreeBST(n->children[i], S, fp);
-            }
-        }
-    }
-
-    // when it has returned, print the value of n
-    if (n->children == NULL) {
-        if (n->id > 1) {
-            fprintf(fp, "%c\n", S[n->id-2]);
-        }
-        else { 
-            fprintf(fp, "$\n", n->id);
-        }
-    } 
-}
-
-void display(node* n) {
-    printf("%-8d ", n->id);
-
-    if (line_iterator % 10 == 0) { 
-        printf("\n"); 
-    }
-    line_iterator++;
-
-    if (n->children != NULL) {
-        for (int j = 0; j < alphabet_length; j++) {
-            if (n->children[j] != NULL) {
-                display(n->children[j]);
-            }
-        }
-    }
-}
-
-
-// DFS style of printing node depths
-void enumerate(node* n, char* S) {
-    
-    if (n->depth > max_depth && n->children != NULL) {
-        max_depth = n->depth;
-    }
-    
-    printf("%-8d ", n->depth);
-
-    if (line_iterator % 10 == 0) { 
-        printf("\n"); 
-    }
-    line_iterator++;
-
-    if (n->children != NULL) {
-        for (int j = 0; j < alphabet_length; j++) {
-            if (n->children[j] != NULL) {
-                enumerate(n->children[j], S);
-            }
-        }
-    }
 }
 
 // to maintain lexicographical structure
@@ -575,29 +452,23 @@ char* readReadsFile(FILE* fp) {
     return NULL;
 }
 
-int best_align_start = 0;
-int best_optimal_score = 0;
-
-
-void mapReads(tree* t, char* S, int* A) {
-    FILE* fp;
-    char* file_name = "Peach_simulated_reads.fasta";
-  
-    fp = fopen(file_name, "r");
-    if (!fp) { printf("READS file %s not opened\n", file_name); exit(0); }
-    printf("READS file %s opened\n", file_name);
-
-    // open reads file
+void mapReads(tree* t, char* S, int* A, char* reads_name) {
     
-    // good non-diagonal case: read:MISIPI, genome:MISSISSIPPI
-    for (int r_i = 0; ; r_i++) {
-        char* read = readReadsFile(fp);
+    FILE* fp;
+    // open reads file
+    fp = fopen(reads_name, "r");
+    if (!fp) { printf("READS file %s not opened\n", reads_file_name); exit(0); }
+    printf("READS file %s opened\n", reads_file_name);
 
+    // begin sequencing reads
+    for (int r_i = 0; ; r_i++) {
+        
+        char* read = readReadsFile(fp);
         if (read == NULL) { break; }
 
-        //int l = strlen(read);
-        int l = 25;
-        int* L_i = findLoc(t->root, S, read);
+
+        int l = strlen(read);
+        int* L_i = findLoc(t->root, S, read, l);
 
         // read has been made 
         int start, end;
@@ -605,27 +476,22 @@ void mapReads(tree* t, char* S, int* A) {
         start = L_i[0];
         end = L_i[1];
 
+        // if no deepest node found
         if (start <= 0 && end <= 0) {
-            //printf("No deepest node found for read %d\n", r_i);
             free(L_i);
             continue;
         }
         
         // printf("Started alignment:\n");
         for (int i = start; i <= end; i++) {
-            //printf("[Read %d] Calling alignment with position %d\n", r_i, A[i]-1);
-            align(read, A[i]-1, S, l);
-            // note to self: It's A[i]-1 because A[i] is the index
-            // of the 1-indexed S string. But it needs to be -1 so that
-            // I can just pass S instead of doing more manipulation.
-            
+            align(read, A[i]-1, S, l);  // note: it's A[i]-1 because A is 1-indexed but S is not.
         }
 
         //printf("Best optimal score: %d\nBest alignment start: %d\n", best_optimal_score, best_align_start);
         //printf("[Read %d] Best start = %d\n", r_i+1, best_align_start);
 
 
-        if (percentIdentity >= .9 && lengthCoverage >= .8) {
+        if (percent_identity >= .9 && length_coverage >= .8) {
 
             char* a = "";
             char* b = "";
@@ -638,15 +504,12 @@ void mapReads(tree* t, char* S, int* A) {
                 b = "{b}";
             }
 
-            aboveXandY++;
             printf("[Read %d] Best start = %d, best end = %d\t", r_i+1, best_align_start, best_align_start + (2*l));
             printf("%s\t%s\n", a, b);
         }
         else {
             printf("[Read %d] No hit found\n");
         }
-
-        successful_reads++;
         
         best_optimal_score = 0;
         best_align_start = 0;
@@ -663,13 +526,11 @@ void mapReads(tree* t, char* S, int* A) {
 
 void align(char* read, int _j, char* S, int l) {
 
-    //printf("Align: j = %d, l = %d\n", _j, l);
-
-    // S[start, end]
-    int start = _j-l;    // (-1 for see below:)
+    int start = _j-l;    
     int end = _j+l;
     int i, j;
 
+    int max_of_curr, max_of_max;
 
     // fix out of bounds cases 
     if (start < 0) { 
@@ -683,33 +544,18 @@ void align(char* read, int _j, char* S, int l) {
     char* G = (char*) malloc(sizeof(char) * G_len);
     
     int k = 0;
+    
+    // populate G
     for (i = start; i <= end && i < strlen(S)-1; i++) {
         G[k++] = S[i]; 
     }
+    
     G[k] = '\0';
 
 
-    /* params setup:
-        0: ma
-        1: mi
-        2: h
-        3: g
-    */ 
-
-    int h = -5;
-    int g = -1;
-
-    /* 
-        create read between read and S[start... end]
-
-        perform SW on it (local alignment)
-        calculate matches and alignlen either by forward walk or traceback
-    */
 
     int m = strlen(read) + 1;
     int n = strlen(G) + 1;
-
-    //printf("m = %d,   n = %d\n", m, n);
 
  
     // init table    
@@ -719,13 +565,6 @@ void align(char* read, int _j, char* S, int l) {
     for (i = 0; i < m; i++) { 
         table[i] = (cell*) malloc(sizeof(cell) * (n));            
     }
-
-    /* 
-        keeping i constant and j moving produces a row
-        keeping i moving and j constant produces a col
-
-        which means i corresponds to a row#, j corresponds to a col#
-    */
 
     // init
     cell* base = &table[0][0];
@@ -760,9 +599,7 @@ void align(char* read, int _j, char* S, int l) {
 
     // forward computation of smith-waterman
     for (i = 1; i < m; i++) { 
-        //printf("m loop #%d\n", i);
         for (j = 1; j < n; j++) {
-            //printf("\tn loop #%d\n", j);
             cell* curr = &table[i][j];
             curr->i = i;
             curr->j = j;
@@ -779,7 +616,7 @@ void align(char* read, int _j, char* S, int l) {
 
             // calculate for D by viewing top cell at table[i-1, j]
             temp = &table[i-1][j];
-            curr->D = findMaxLocal  (
+            curr->D = findMaxOfFour(
                                         temp->D + g, 
                                         temp->S + h + g, 
                                         temp->I + h + g,
@@ -788,48 +625,46 @@ void align(char* read, int _j, char* S, int l) {
 
             // set temp to I by viewing left cell at table[i, j-1]  
             temp = &table[i][j-1];
-            curr->I = findMaxLocal(   
-                                    temp->I + g,        
-                                    temp->D + h + g, 
-                                    temp->S + h + g,
-                                    0 
-                                  );
+            curr->I = findMaxOfFour(   
+                                        temp->I + g,        
+                                        temp->D + h + g, 
+                                        temp->S + h + g,
+                                        0 
+                                   );
 
             // here we use findMax to find the max between S, D, and I
-            int max_of_dirs = findMax(curr->S, curr->D, curr->I);
+            max_of_curr = findMax(curr->S, curr->D, curr->I);
+            max_of_max = findMax(max_cell->D, max_cell->I, max_cell->S);
 
-            // if the max of this cell's (S or D or I) is greater than the max cell's 
-            if (max_of_dirs >= findMax(max_cell->D, max_cell->I, max_cell->S)) { 
+            // if the max of this cell's (S or D or I) is greater than the max cell's, make this the new max
+            if (max_of_curr > max_of_max) { 
                 last_max = current_max;
-                current_max = max_of_dirs;
+                current_max = max_of_curr;
                 max_cell = curr; 
             }
-
-            else if (max_of_dirs > findMax(max_cell->D, max_cell->I, max_cell->S)) {
-                last_max = 0;
-                current_max = max_of_dirs;
-                max_cell = curr; // make this the new max_cell
-
-            }
         }
-    }
+    }   // end forward computation
 
-    int optimal_score = findMax(max_cell->D, max_cell->I, max_cell->S);
 
-    if (last_max == optimal_score) {
+    // if the last max we calculated was the same as this one, there are multiple max cells in the table, so record that for statistical purposes
+    if (last_max == current_max) {
         duplicate_max_cells++;
     }
 
+    // begin retrace
+
     direction d;
+    // set retrace cell to the max cell 
     cell* retrace = max_cell;
-    int val = findMax(max_cell->D, max_cell->I, max_cell->S);
-    if (val == max_cell->D) {
+
+    // start the walk back simply by finding where the max came from
+    if (max_of_max == max_cell->D) {
         d = up;
     }
-    else if (val == max_cell->I) {
+    else if (max_of_max == max_cell->I) {
         d = left;
     }
-    else if (val == max_cell->S) {
+    else if (max_of_max == max_cell->S) {
         d = diagonal;
     }
     
@@ -837,8 +672,7 @@ void align(char* read, int _j, char* S, int l) {
     int mismatches = 0;
     int gaps = 0;
 
-    while (1) {
-
+    while (1) {         // breaks upon reaching a cell with value 0
         /* 
         If max was D:
             Look at cell (i-1,j). 
@@ -847,23 +681,14 @@ void align(char* read, int _j, char* S, int l) {
             Update curr_cell = (i-1,j) 
             Set direction = whatever was max (S, I, or D)
             Go onto next iteration 
-        If max was I:
-            Look at cell (i, j-1)
-            For that cell, compute next max using I rules:
-                Max (I(i, j-1) + g, S(i,j-1) + h + g, D(i,j-1) + h + g)
-            Update curr_cell = (i, j-1)
-            Set direction = whatever was max (S, I, or D)
-            Go onto next iteration
+        If max was I or S:
+            same procedure for above, but using I or S equations
+        */ 
 
-        If max was S:
-            (same procedure as above)
-        */
-        
         i = retrace->i;
         j = retrace->j;
         
         if (d == done || i == 0 || j == 0) { 
-            //printf("Done at [%d][%d]\n", i, j);
             break; 
         }
 
@@ -878,7 +703,6 @@ void align(char* read, int _j, char* S, int l) {
                                     retrace->D + g,
                                     retrace->I + h + g
                                 );
-            //printf("Up from [%d][%d]\n", i, j);
         }
 
         // I
@@ -891,7 +715,6 @@ void align(char* read, int _j, char* S, int l) {
                                     retrace->D + h + g,
                                     retrace->I + g
                                 );
-            //printf("Left from [%d][%d]\n", i, j);
         }
 
         // S
@@ -911,43 +734,41 @@ void align(char* read, int _j, char* S, int l) {
                                     retrace->D + sub,
                                     retrace->I + sub
                                 );
-            //printf("Diagonal from [%d][%d]\n", i, j);
         }
+    }   // end traceback
+
+
+    // if the the new max is larger than the old max, make this the new max 
+    if (current_max > best_optimal_score) { 
+        best_optimal_score = current_max;
+        best_align_start = _j;
     }
 
-    //printf("Results:\n\tMatches: %d\n\tMismatches: %d\n\tGaps: %d\n", matches, mismatches, gaps);
-
-    if (optimal_score == best_optimal_score) {
-        best_optimal_score = optimal_score;
+    // if there's a tie between the old max and new max, we have a duplicate
+    else if (current_max == best_optimal_score) {
+        best_optimal_score = current_max;
         best_align_start = _j;
         duplicate_optimals++;
     }
 
-    else if (optimal_score >= best_optimal_score) { 
-        best_optimal_score = optimal_score;
-        best_align_start = _j;
-    }
-
+    // calculate alignment statistics
     int alignlen = matches + mismatches + gaps;
+    percent_identity = (double)matches / (double) alignlen;
+    length_coverage = (double) alignlen / l;
 
-    percentIdentity = (double)matches / (double) alignlen;
-
-
-    lengthCoverage = (double) alignlen / l;
-
+    // clear rows of table
     for (i = 0; i < m; i++) { 
         free(table[i]);          
     }
 
+    // clear table and genome subsequence
     free(table);
     free(G);
 }
 
 // findloc returns the start and end node id's for the deepest available node in a subtree, if such a node exists 
-int* findLoc(node* root, char* S, char* read) {
-    int read_ptr;       
-    int l = 25;
-    //int l = strlen(read);
+int* findLoc(node* root, char* S, char* read, int l) {
+    int read_ptr;
 
     // 0: abcde
     // 1:  bcde
@@ -1078,13 +899,11 @@ int main(int argc, char** argv) {
     //searchTree(t->root, S);
 
     printf("--mapreads:--\n");
-    mapReads(t, S, A);
+    mapReads(t, S, A, reads_file);
     printf("-- -- -- -- --\n");
 
     printf("McCreight's Algorithm program finished.\n");
-    printf("Options used:\n\tx=%d\n\tl=%d\n", x, 25);
-    printf("successful reads = %d\n", successful_reads);
-    printf("above x and y = %d\n", aboveXandY);
+    printf("Options used:\n\tx=%d\n", x);
     free(t);
     return 0;
 }
